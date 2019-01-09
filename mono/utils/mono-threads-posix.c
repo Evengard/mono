@@ -15,6 +15,10 @@
 #define _DARWIN_C_SOURCE 1
 #endif
 
+#if defined (__HAIKU__)
+#include <os/kernel/OS.h>
+#endif
+
 #include <mono/utils/mono-threads.h>
 #include <mono/utils/mono-coop-semaphore.h>
 #include <mono/metadata/gc-internals.h>
@@ -30,7 +34,7 @@
 extern int tkill (pid_t tid, int signal);
 #endif
 
-#if defined(_POSIX_VERSION) && !defined (TARGET_WASM)
+#if defined(_POSIX_VERSION) && !defined (HOST_WASM)
 
 #include <pthread.h>
 
@@ -125,7 +129,7 @@ mono_threads_platform_exit (gsize exit_code)
 }
 
 int
-ves_icall_System_Threading_Thread_SystemMaxStackSize (MonoError *error)
+mono_thread_info_get_system_max_stack_size (void)
 {
 	struct rlimit lim;
 
@@ -207,6 +211,19 @@ mono_native_thread_create (MonoNativeThreadId *tid, gpointer func, gpointer arg)
 	return pthread_create (tid, NULL, (void *(*)(void *)) func, arg) == 0;
 }
 
+size_t
+mono_native_thread_get_name (MonoNativeThreadId tid, char *name_out, size_t max_len)
+{
+#ifdef HAVE_PTHREAD_GETNAME_NP
+	int error = pthread_getname_np(tid, name_out, max_len);
+	if (error != 0)
+		return 0;
+	return strlen(name_out);
+#else
+	return 0;
+#endif
+}
+
 void
 mono_native_thread_set_name (MonoNativeThreadId tid, const char *name)
 {
@@ -226,6 +243,14 @@ mono_native_thread_set_name (MonoNativeThreadId tid, const char *name)
 		strncpy (n, name, sizeof (n) - 1);
 		n [sizeof (n) - 1] = '\0';
 		pthread_setname_np (n);
+	}
+#elif defined (__HAIKU__)
+	thread_id haiku_tid;
+	haiku_tid = get_pthread_thread_id (tid);
+	if (!name) {
+		rename_thread (haiku_tid, "");
+	} else {
+		rename_thread (haiku_tid, name);
 	}
 #elif defined (__NetBSD__)
 	if (!name) {

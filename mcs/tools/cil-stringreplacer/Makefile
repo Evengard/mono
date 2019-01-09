@@ -5,10 +5,8 @@ include ../../build/rules.make
 PROGRAM = cil-stringreplacer.exe
 NO_INSTALL = yes
 
-ifeq ($(PROFILE),basic)
-# It can be run using system .net during boostrap
-TARGET_NET_REFERENCE = v4.6
-endif
+TARGET_NET_REFERENCE = $(BOOTSTRAP_BIN_PROFILE)
+PROGRAM_USE_INTERMEDIATE_FILE = 1
 
 LIB_REFS = System Mono.Cecil
 

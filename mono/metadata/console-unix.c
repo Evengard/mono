@@ -57,6 +57,7 @@
 
 #include <mono/metadata/console-io.h>
 #include <mono/metadata/exception.h>
+#include "icall-decl.h"
 
 static gboolean setup_finished;
 static gboolean atexit_called;
@@ -74,6 +75,10 @@ static struct termios mono_attr;
 
 /* static void console_restore_signal_handlers (void); */
 static void console_set_signal_handlers (void);
+
+
+static GENERATE_TRY_GET_CLASS_WITH_CACHE (console, "System", "Console");
+
 
 void
 mono_console_init (void)
@@ -218,14 +223,16 @@ tty_teardown (void)
 static void
 do_console_cancel_event (void)
 {
-	static MonoMethod *System_Console_DoConsoleCancelEventBackground_method = ((gpointer)-1);
+	static MonoMethod *System_Console_DoConsoleCancelEventBackground_method = (MonoMethod*)(intptr_t)-1;
 	ERROR_DECL (error);
 
-	if (mono_defaults.console_class == NULL)
+	if (mono_class_try_get_console_class () == NULL)
 		return;
 
-	if (System_Console_DoConsoleCancelEventBackground_method == ((gpointer)-1))
-		System_Console_DoConsoleCancelEventBackground_method = mono_class_get_method_from_name (mono_defaults.console_class, "DoConsoleCancelEventInBackground", 0);
+	if (System_Console_DoConsoleCancelEventBackground_method == (gpointer)(intptr_t)-1) {
+		System_Console_DoConsoleCancelEventBackground_method = mono_class_get_method_from_name_checked (mono_class_try_get_console_class (), "DoConsoleCancelEventInBackground", 0, 0, error);
+		mono_error_assert_ok (error);
+	}
 	if (System_Console_DoConsoleCancelEventBackground_method == NULL)
 		return;
 
@@ -463,12 +470,19 @@ ves_icall_System_ConsoleDriver_TtySetup (MonoStringHandle keypad, MonoStringHand
 	/* Disable C-y being used as a suspend character on OSX */
 	mono_attr.c_cc [VDSUSP] = 255;
 #endif
-	if (tcsetattr (STDIN_FILENO, TCSANOW, &mono_attr) == -1)
+	gint ret;
+	do {
+		MONO_ENTER_GC_SAFE;
+		ret = tcsetattr (STDIN_FILENO, TCSANOW, &mono_attr);
+		MONO_EXIT_GC_SAFE;
+	} while (ret == -1 && errno == EINTR);
+
+	if (ret == -1)
 		return FALSE;
 
 	uint32_t h;
 	set_control_chars (MONO_ARRAY_HANDLE_PIN (control_chars_arr, gchar, 0, &h), mono_attr.c_cc);
-	mono_gchandle_free (h);
+	mono_gchandle_free_internal (h);
 	/* If initialized from another appdomain... */
 	if (setup_finished)
 		return TRUE;

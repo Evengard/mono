@@ -769,7 +769,7 @@ namespace MonoTests.System.Net.Http
 					client.SendAsync (request, HttpCompletionOption.ResponseHeadersRead).Wait ();
 					Assert.Fail ("#1");
 				} catch (AggregateException e) {
-					Assert.AreEqual (typeof (ProtocolViolationException), e.InnerException.GetType (), "#2");
+					Assert.AreEqual (typeof (InvalidOperationException), e.InnerException.GetType (), "#2");
 				}
 				Assert.IsNull (failed, "#102");
 			} finally {
@@ -1461,7 +1461,7 @@ namespace MonoTests.System.Net.Http
 		HttpListener CreateListener (Action<HttpListenerContext> contextAssert, int port)
 		{
 			var l = new HttpListener ();
-			l.Prefixes.Add (string.Format ("http://+:{0}/", port));
+			l.Prefixes.Add (string.Format ("http://*:{0}/", port));
 			l.Start ();
 			AddListenerContext(l, contextAssert);
 
